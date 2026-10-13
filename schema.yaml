@@ -1,0 +1,338 @@
+name: design-doc
+version: 1
+description: Design-doc workflow - proposal (intro, context, goals, approach, trade-offs) → delta specs → design (how) → tasks (a check on every step)
+artifacts:
+  - id: proposal
+    generates: proposal.md
+    description: Short intro, context and goals for the change
+    template: proposal.md
+    instruction: |
+      Create the proposal: what this change achieves and why. It is read
+      top to bottom, so each section only builds on the ones before it.
+
+      Terms: a **change** is this unit of work (the folder holding proposal,
+      design, delta specs and tasks). A **capability** is a named, lasting
+      area of system behavior. A **spec file** states one capability's
+      requirements (`openspec/specs/<capability>/spec.md`). A **delta spec**
+      is this change's edits to a spec file
+      (`specs/<capability>/spec.md` inside the change). Use these terms in
+      what you write; never say "spec" or "delta" alone. When the user says
+      "create a spec" they almost always mean "create a change".
+
+      Sections, in this order:
+      - **Title** (`# ...`): what the change achieves, in a few words.
+      - **Intro** (no heading): 2-3 sentences. What the change achieves and
+        why now. Someone who reads only this should know what it's for.
+      - **Context**: the current situation and the facts that make the change
+        necessary - current behavior, incidents with dates, fixed
+        constraints. State each fact once. No solutions.
+      - **Goals**: outcomes, not mechanisms. Each goal is something a person
+        or system can observe once the change is done, checkable without
+        knowing how it was built. No file names, functions, protocols,
+        packages or components - those belong in design.md. A constraint on
+        the implementation ("all handlers live in one module") is a design
+        decision, not a goal.
+      - **Approach**: one short paragraph on the shape of the solution, enough
+        to follow the delta specs and design. No alternatives or detailed
+        decisions - those go in design.md.
+      - **Trade-offs and limits**: consequences of this approach that users
+        will notice even when everything works as designed - downsides, and
+        things they might expect that the change deliberately doesn't do -
+        each with its reason. Something that might go wrong is a risk and
+        goes in design.md's Risks. Rejected alternative solutions go in
+        design.md's Decisions, not here. Write "None." if there are none.
+      - **External impact** (optional): who or what outside this change is
+        affected - other systems, services, API consumers, integrations,
+        teams - and what they need to do. Mark breaking changes with
+        **BREAKING**. Include this section whenever there is a breaking
+        change; omit it when nothing outside the change is affected.
+      - **Capabilities**: one bullet per capability, names only - the path in
+        backticks followed by (new) or (modified), e.g.
+        "- `user-auth` (new)". The delta specs carry their own purpose, so
+        don't describe them here.
+
+      If the context or goals aren't clear from the conversation, ask the
+      user rather than guessing.
+
+      Do not add "Why", "What Changes" or "Non-goals" sections. Files and
+      components touched are listed in tasks.md.
+
+      Choosing capabilities: name each for a durable system behavior (for
+      example, `user-auth`), not the work in this change. Research
+      existing capabilities first: run `openspec list --specs`, then
+      `openspec show "<spec-id>" --type spec --json --no-scenarios` for any
+      that look related, and read relevant ones in full with
+      `openspec show "<spec-id>" --type spec`. Reuse an existing capability's
+      exact path instead of inventing a near-duplicate. Mark a capability
+      `(modified)` only if its REQUIREMENTS change, not just its
+      implementation.
+
+      Every change must list at least one capability or opt out of delta specs with
+      `skip_specs: true` in `.openspec.yaml` - only when no spec-level
+      behavior changes (pure refactor, tooling, docs). Then write "None."
+      under Capabilities, and don't invent a requirement to satisfy
+      validation.
+
+      Keep it short: usually under a page. Prefer plain prose and short
+      bullets; avoid nested bullet lists.
+
+      Note: `openspec archive` prints a non-blocking warning that proposal.md
+      has no "Why" or "What Changes" section. That is expected with this
+      schema; ignore it.
+    requires: []
+
+  - id: specs
+    generates: "specs/**/*.md"
+    description: Delta specs - the requirement changes for each capability
+    template: spec.md
+    instruction: |
+      Create delta spec files that define WHAT the system should do.
+
+      A delta spec is a behavior contract, not an implementation plan.
+
+      Good delta spec content:
+      - Observable behavior users or downstream systems rely on
+      - Inputs, outputs, and error conditions
+      - External constraints (security, privacy, reliability, compatibility)
+      - Scenarios that can be tested or explicitly validated
+
+      Avoid in delta specs:
+      - Internal class/function names
+      - Library or framework choices
+      - Step-by-step implementation details
+      - Detailed execution plans (those belong in design.md or tasks.md)
+
+      Quick test: if the implementation can change without changing externally
+      visible behavior, it likely does not belong in the delta spec.
+
+      Don't over-specify. Specify only what users (people or downstream
+      systems) care about and would notice if it changed. Leave out behavior
+      nobody depends on, and include exact numbers (timings, limits, retry
+      counts) only when users rely on them. A design decision shouldn't become
+      a requirement because it's written down: if changing it wouldn't
+      matter to a user, it belongs in design.md. Prefer a few requirements
+      that capture what matters over many that pin down one implementation.
+
+      Create one delta spec per capability listed in the proposal's Capabilities section.
+      `<capability-path>` is the capability's directory relative to `specs/` (for example,
+      `user-auth` or `identity/user-auth`). Preserve the full path:
+      - New capabilities: use the exact path from the proposal at `specs/<capability-path>/spec.md`. Any path segment newly introduced in the proposal must be kebab-case. Follow the project's existing organization; do not add a new domain level when the project uses a flat layout.
+      - Modified capabilities: use the exact existing path from `openspec/specs/<capability-path>/` when creating the delta spec at `specs/<capability-path>/spec.md`. Run `openspec list --specs` to confirm that path before writing the delta spec, appending `--store "<id>"` only for a registered standalone store - a mistyped or invented path targets a capability that does not exist rather than the one you meant. Do not move or rename the capability.
+
+      Write the delta specs one at a time, so the user sees progress and an
+      interrupted run keeps the files it already wrote:
+      - Before writing anything, compare the capabilities the proposal lists
+        with the `specs/<capability-path>/spec.md` files that already exist,
+        and start with the first capability that has no file. Do not rewrite
+        an existing file unless the user asks you to.
+      - Before each file, say in one line which capability you are writing.
+      - Write each file as soon as you have drafted it. Do not plan every file
+        before writing the first.
+      - Stop when every capability the proposal lists has its file.
+
+      There must be at least one delta spec unless the change's `.openspec.yaml`
+      sets `skip_specs: true` (no spec-level behavior change) - `openspec validate`
+      rejects a change with no delta specs without that marker. If the proposal lists no
+      capabilities and `skip_specs` is not set, revisit the proposal first.
+
+      The template shows every delta section. Keep only the sections this
+      delta spec needs and delete the rest, headings included.
+
+      Delta operations (use ## headers):
+      - **ADDED Requirements**: New capabilities
+      - **MODIFIED Requirements**: Changed behavior - MUST include full updated content
+      - **REMOVED Requirements**: Deprecated features - MUST include **Reason** and **Migration**
+      - **RENAMED Requirements**: Name changes only - use FROM:/TO: format
+
+      Format requirements:
+      - Each requirement: `### Requirement: <name>` followed by description
+      - Use SHALL/MUST for normative requirements (avoid should/may)
+      - Each scenario: `#### Scenario: <name>` with WHEN/THEN format
+      - **CRITICAL**: Scenarios MUST use exactly 4 hashtags (`####`). Using 3 hashtags or bullets will fail silently.
+      - Every requirement MUST have at least one scenario.
+      - Keep each requirement's description (the text between `### Requirement:` and its first scenario) to 500 characters or fewer. `openspec validate` flags longer descriptions in ADDED requirements and in the main spec. This is a warning: normal validation still passes, but `openspec validate --strict` fails on it. When writing a new requirement, state one behavior per requirement: move examples and edge cases into scenarios, and split a requirement that covers several behaviors into separate `### Requirement:` blocks, each with its own scenarios. Under MODIFIED, keep the existing requirement block whole; never split, trim or rewrite existing text just to meet the length. Split an existing long requirement only when the user asks for it, in a change made for that purpose: under MODIFIED, keep its header and every scenario and cut its description down to one behavior without changing its meaning, then add each behavior you removed as its own ADDED requirement with its own scenarios.
+
+      New capabilities only: the delta spec's first section is `## Purpose` -
+      one or two sentences (50+ characters, or `openspec validate --strict`
+      reports it as too brief) describing what the capability is for. Archive
+      copies it into the spec file it creates; without it the new spec file is
+      left with a `TBD ... Update Purpose after archive` placeholder to fill in
+      by hand. Do NOT add `## Purpose` to a delta spec for an existing capability -
+      its spec file already has one and the delta spec's is ignored. To change an
+      existing capability's Purpose - including a leftover `TBD` placeholder -
+      edit `<planningHome.root>/openspec/specs/<capability-path>/spec.md`
+      directly. `planningHome.root` comes from the `openspec instructions ...
+      --json` response. Always use it rather than a repo-relative path: it
+      resolves to the store whenever the change lives in one - whether that
+      came from `--store`, a project `store:` pointer, or a global default
+      store - and to the current repository otherwise. Do not try to work out
+      which case applies; the field already has.
+
+      MODIFIED requirements workflow:
+      1. Locate the existing requirement in `<planningHome.root>/openspec/specs/<capability-path>/spec.md` (the same store-aware root as above)
+      2. Copy the ENTIRE requirement block (from `### Requirement:` through all scenarios)
+      3. Paste under `## MODIFIED Requirements` and edit to reflect new behavior
+      4. Ensure header text matches exactly (whitespace-insensitive)
+
+      Common pitfall: Using MODIFIED with partial content loses detail at archive time.
+      If adding new concerns without changing existing behavior, use ADDED instead.
+
+      Example (a new capability, so its first section is `## Purpose`):
+      ```
+      # Delta Spec
+
+      ## Purpose
+
+      Lets users take their data out of the product in a portable format.
+
+      ## ADDED Requirements
+
+      ### Requirement: User can export data
+      The system SHALL allow users to export their data in CSV format.
+
+      #### Scenario: Successful export
+      - **WHEN** user clicks "Export" button
+      - **THEN** system downloads a CSV file with all user data
+
+      ## REMOVED Requirements
+
+      ### Requirement: Legacy export
+      **Reason**: Replaced by new export system
+      **Migration**: Use new export endpoint at /api/v2/export
+      ```
+
+      Delta specs should be testable - each scenario is a potential test case, and
+      tasks.md may cite scenarios by name. Give every scenario a short,
+      distinct name.
+
+      Don't restate the proposal's Context: the requirement text says what the
+      system does, not why.
+    requires:
+      - proposal
+
+  - id: design
+    generates: design.md
+    description: How the goals are met - decisions, risks, migration and rollback
+    template: design.md
+    instruction: |
+      Create the design: how the proposal's goals are met. Read
+      proposal.md first and build on it. Expand on its Approach as needed,
+      without repeating it. Don't restate its context or goals, or the
+      requirements in the delta specs; refer to them by name when needed.
+
+      Sections, in this order:
+      - **Technical context** (optional): technical facts that shape the
+        decisions and aren't in the proposal - API or library behavior,
+        service limits, hardware details, existing patterns in the codebase.
+        Facts only. Omit the section if there is nothing to add.
+      - **Decisions**: one `###` heading per decision, phrased as the choice
+        made ("Retry failed sends from a background queue"). Under it: what
+        is done, then why, then each rejected alternative as
+        `- **Alternative:** <option> — rejected because <reason>`.
+        Include enough detail to implement from (names, files, settings),
+        but not line-by-line code.
+      - **Risks**: things that might go wrong, as
+        `- **<risk>** → <mitigation>` or `→ Accepted: <reason>`.
+        Consequences users notice even when everything works belong in the
+        proposal's Trade-offs and limits, not here.
+      - **Migration and rollback** (optional): high-level strategy only -
+        any order of operations that matters and why, expected downtime, how to back out, and
+        what can't be undone. No step-by-step procedure: the steps go in
+        tasks.md, which is written from this design. Omit for changes with
+        nothing to migrate or roll back.
+      - **Open questions** (optional): only unknowns that can be answered
+        later without changing the delta specs, decisions or tasks. If a
+        question would change any of those, ask the user now instead.
+
+      The design is reviewed before tasks.md exists, so it must make sense
+      on its own and never refer to tasks.
+
+      Planning only: don't record implementation results here. If a decision
+      changes during implementation, update the decision itself so the
+      design describes what was built, and note why in session-notes.md.
+
+      Keep it as short as the change allows; a small change may have one or
+      two decisions. Prefer short paragraphs and flat bullets.
+    requires:
+      - proposal
+
+  - id: tasks
+    generates: tasks.md
+    description: Implementation checklist with a check on every step
+    template: tasks.md
+    instruction: |
+      Create the task list. Read the delta specs for what to build and the design
+      for how.
+
+      Before writing tasks, check design.md for Open Questions. If any would
+      change what gets built, resolve them with the user first.
+
+      **Checkbox format is parsed by the apply phase.** Each tracked task is
+      `- [ ] X.Y Description`. A box holding only `x` counts as done; any
+      other marker reads as unfinished; a line without a checkbox isn't
+      tracked.
+
+      Structure:
+      1. **Implementation groups** (`## 1. <name>`, ...), in dependency order.
+         - Every task ends with `; verify: <check>`: the cheapest check that
+           proves the step worked, e.g. the new tests pass, a build or type
+           check, a config validation command, a dry run or plan, a service
+           starting.
+         - Each group lands the automated tests and docs its own work calls
+           for. Don't collect them into a later group: when a later group
+           first exercises an earlier one, failures cascade back through
+           everything in between.
+         - Where a group can be run or deployed and observed on its own, end
+           it with a `Group check:` task that exercises the running
+           behavior. This finds problems early, before later groups build on
+           them. Skip it for groups that can't be observed alone
+           (scaffolding, config that only works with a later group).
+      2. **Final verification** (optional, use judgment). Consider ending with
+         a group that checks the change as a whole once all groups are done,
+         when it has behavior worth checking that way. It might include:
+         - delta spec scenarios not already covered by automated tests,
+           cited by scenario name;
+         - an end-to-end check where the change really runs (deployed
+           system, staging, or a realistic local run), including the full
+           test suite if the project has one;
+         - regressions in things the change touched.
+         Suffix tasks that need a person (physical hardware, a visual check,
+         access the agent doesn't have) with `(manual)`, and tasks that can
+         only be checked at a later real-world occurrence with `(deferred)`.
+         Keep manual tasks together so they can be done in one session.
+      3. **Wrap-up** (optional): project docs (e.g. README, AGENTS.md) that
+         future work needs beyond what each group already updated, and
+         cleanup of temporary test setup.
+
+      Keep each task to one or two lines. Steps that need more detail are
+      described in design.md.
+
+      Workflow steps that need the change archived (e.g. "archive the
+      change") go as plain bullets, without checkboxes, in an optional
+      `## Workflow follow-up` section at the end.
+    requires:
+      - specs
+      - design
+
+apply:
+  requires: [ tasks ]
+  tracks: tasks.md
+  instruction: |
+    Read proposal.md, the delta specs, design.md and tasks.md, then work through the
+    pending tasks in order, marking each complete as soon as it is done.
+
+    - Run each task's verify check before ticking it. Pause on a failure
+      instead of moving on, since later groups build on earlier ones.
+    - When you reach `(manual)` tasks, ask the user to do them as a batch,
+      with the exact steps and the expected results.
+    - Record outcomes in at most one short line after the task, e.g.
+      `- [x] 2.3 ... — passed; retried twice before succeeding`.
+      Longer findings, logs and surprises go in `session-notes.md` in the
+      change folder.
+    - A test the user decides to skip is ticked and marked
+      `— **SKIPPED** (user, YYYY-MM-DD): <reason>`. Never tick an unrun test
+      without that marker.
+    - `(deferred)` tasks stay unticked until observed; tell the user which
+      are outstanding when the rest are done.
+    - If implementation shows the design was wrong, update design.md to
+      match what was built and note why in session-notes.md.
